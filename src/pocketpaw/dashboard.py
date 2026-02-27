@@ -27,14 +27,13 @@ import io
 import json
 import logging
 from pathlib import Path
-from fastapi.responses import JSONResponse
 
 try:
     import qrcode
     import uvicorn
     from fastapi import FastAPI, HTTPException, Query, Request, WebSocket
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import Response
+    from fastapi.responses import Response, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates
 except ImportError as _exc:
@@ -1103,10 +1102,10 @@ async def save_identity(request: Request):
     """Save edits to agent identity files. Changes take effect on the next message."""
     try:
         data = await request.json()
-    except Exception:
+    except ValueError:
         return JSONResponse(
-        status_code=400,
-        content={"error": "Invalid JSON body"},
+            status_code=400,
+            content={"error": "Invalid JSON body"},
         )
     
     identity_dir = get_config_path().parent / "identity"

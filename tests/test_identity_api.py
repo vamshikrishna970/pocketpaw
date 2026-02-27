@@ -229,6 +229,32 @@ class TestSaveIdentity:
             assert result["updated"] == ["USER.md"]
             assert not (identity_dir / "malicious_key").exists()
 
+    async def test_ignores_unknown_keys(self):
+        """PUT /api/identity ignores keys not in the file_map."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            identity_dir = base / "identity"
+            identity_dir.mkdir()
+            
+            request = MagicMock()
+            request.json = AsyncMock(
+                return_value={
+                    "user_file": "Name: Valid",
+                    "malicious_key": "should be ignored",
+                }
+            )
+            
+            with patch("pocketpaw.dashboard.get_config_path") as mock_path:
+                mock_path.return_value = base / "config.json"
+                from pocketpaw.dashboard import save_identity
+                
+                result = await save_identity(request)
+                
+            assert result["updated"] == ["USER.md"]
+            assert not (identity_dir / "malicious_key").exists()
+
+
+
 
 class TestIdentityAgentIntegration:
     """Tests verifying that saved identity changes are picked up by the agent."""
