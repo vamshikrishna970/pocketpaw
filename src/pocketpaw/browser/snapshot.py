@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .webmcp.models import WebMCPToolDef
 
 
 @dataclass
@@ -130,7 +133,11 @@ class SnapshotGenerator:
         self._lines: list[str] = []
 
     def generate(
-        self, tree: AccessibilityNode, title: str | None = None, url: str | None = None
+        self,
+        tree: AccessibilityNode,
+        title: str | None = None,
+        url: str | None = None,
+        webmcp_tools: list[WebMCPToolDef] | None = None,
     ) -> tuple[str, RefMap]:
         """Generate a semantic snapshot from an accessibility tree.
 
@@ -138,6 +145,7 @@ class SnapshotGenerator:
             tree: The root AccessibilityNode (usually WebArea)
             title: Optional page title
             url: Optional page URL
+            webmcp_tools: Optional list of WebMCP tools discovered on the page
 
         Returns:
             Tuple of (snapshot_text, refmap)
@@ -155,6 +163,15 @@ class SnapshotGenerator:
 
         # Process the tree
         self._process_node(tree, indent=0)
+
+        # Append WebMCP tools section if any
+        if webmcp_tools:
+            self._lines.append("")
+            self._lines.append("--- WebMCP Tools ---")
+            for tool in webmcp_tools:
+                params = self._format_webmcp_params(tool.input_schema)
+                desc = f' — "{tool.description}"' if tool.description else ""
+                self._lines.append(f"- {tool.name}({params}){desc}")
 
         return "\n".join(self._lines), self._refmap
 
@@ -262,6 +279,18 @@ class SnapshotGenerator:
             attrs.append(f"[type={props['type']}]")
 
         return attrs
+
+    @staticmethod
+    def _format_webmcp_params(schema: dict[str, Any]) -> str:
+        """Format a JSON Schema properties dict as a parameter signature."""
+        props = schema.get("properties", {})
+        if not props:
+            return ""
+        parts = []
+        for name, prop in props.items():
+            type_str = prop.get("type", "any")
+            parts.append(f"{name}: {type_str}")
+        return ", ".join(parts)
 
 
 __all__ = ["RefMap", "AccessibilityNode", "SnapshotGenerator"]

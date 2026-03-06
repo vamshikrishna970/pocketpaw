@@ -582,6 +582,12 @@ class Settings(BaseSettings):
         default=30, description="Default timeout (seconds) for sync webhook responses"
     )
 
+    # WebMCP (experimental)
+    webmcp_enabled: bool = Field(
+        default=False,
+        description="Enable WebMCP tool discovery on browser pages (experimental, Chrome Canary)",
+    )
+
     # Web Server
     web_host: str = Field(default="127.0.0.1", description="Web server host")
     web_port: int = Field(default=8888, description="Web server port")

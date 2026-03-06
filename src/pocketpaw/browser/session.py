@@ -92,8 +92,11 @@ class BrowserSessionManager:
                     await session.driver.close()
                     del self._sessions[session_id]
 
-            # Create new session
-            driver = BrowserDriver(headless=headless)
+            # Create new session (check config for WebMCP)
+            from pocketpaw.config import get_settings
+
+            webmcp_enabled = get_settings().webmcp_enabled
+            driver = BrowserDriver(headless=headless, webmcp_enabled=webmcp_enabled)
             await driver.launch()
 
             session = BrowserSession(session_id=session_id, driver=driver)

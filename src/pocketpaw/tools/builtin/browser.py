@@ -64,6 +64,7 @@ class BrowserTool(BaseTool):
                         "snapshot",
                         "screenshot",
                         "close",
+                        "webmcp",
                     ],
                 },
                 "url": {
@@ -85,6 +86,18 @@ class BrowserTool(BaseTool):
                     "type": "string",
                     "description": "Scroll direction: 'up' or 'down' (default: 'down')",
                     "enum": ["up", "down"],
+                },
+                "tool_name": {
+                    "type": "string",
+                    "description": (
+                        "Name of the WebMCP tool to call (required for 'webmcp' action)"
+                    ),
+                },
+                "input": {
+                    "type": "object",
+                    "description": (
+                        "Input parameters for the WebMCP tool (required for 'webmcp' action)"
+                    ),
                 },
                 "session_id": {
                     "type": "string",
@@ -126,6 +139,8 @@ class BrowserTool(BaseTool):
                 return await self._screenshot(session_id)
             elif action == "close":
                 return await self._close(session_id)
+            elif action == "webmcp":
+                return await self._webmcp(params, session_id)
             else:
                 return self._error(f"Unknown action: {action}")
 
@@ -137,6 +152,23 @@ class BrowserTool(BaseTool):
         manager = get_browser_session_manager()
         session = await manager.get_or_create(session_id, headless=True)
         return session.driver
+
+    async def _webmcp(self, params: dict, session_id: str) -> str:
+        """Handle webmcp action."""
+        tool_name = params.get("tool_name")
+        tool_input = params.get("input", {})
+
+        if not tool_name:
+            return self._error("tool_name is required for webmcp action")
+
+        driver = await self._get_driver(session_id)
+        if not driver._webmcp_tools:
+            return self._error("No WebMCP tools available on the current page")
+
+        from ...browser.webmcp.executor import WebMCPExecutor
+
+        page = driver._require_page()
+        return await WebMCPExecutor.execute(page, tool_name, tool_input, driver._webmcp_tools)
 
     async def _navigate(self, params: dict, session_id: str) -> str:
         """Handle navigate action."""

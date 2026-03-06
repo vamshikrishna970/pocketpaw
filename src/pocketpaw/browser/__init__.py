@@ -8,6 +8,7 @@
 from .driver import BrowserDriver, NavigationResult
 from .session import BrowserSession, BrowserSessionManager, get_browser_session_manager
 from .snapshot import AccessibilityNode, RefMap, SnapshotGenerator
+from .webmcp import WebMCPDiscovery, WebMCPExecutor, WebMCPToolDef
 
 __all__ = [
     # Snapshot
@@ -21,4 +22,8 @@ __all__ = [
     "BrowserSession",
     "BrowserSessionManager",
     "get_browser_session_manager",
+    # WebMCP
+    "WebMCPDiscovery",
+    "WebMCPExecutor",
+    "WebMCPToolDef",
 ]

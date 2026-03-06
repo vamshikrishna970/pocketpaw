@@ -11,12 +11,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .snapshot import AccessibilityNode, RefMap, SnapshotGenerator
+from .webmcp.models import WebMCPToolDef
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Page, Playwright
@@ -30,6 +31,7 @@ class NavigationResult:
 
     snapshot: str
     refmap: RefMap
+    webmcp_tools: list[WebMCPToolDef] = field(default_factory=list)
 
 
 class BrowserDriver:
@@ -51,18 +53,21 @@ class BrowserDriver:
     # Scroll amount in pixels
     SCROLL_AMOUNT = 500
 
-    def __init__(self, headless: bool = True) -> None:
+    def __init__(self, headless: bool = True, webmcp_enabled: bool = False) -> None:
         """Initialize the browser driver.
 
         Args:
             headless: Whether to run browser in headless mode (default True)
+            webmcp_enabled: Whether to discover WebMCP tools on pages
         """
         self.headless = headless
+        self.webmcp_enabled = webmcp_enabled
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._page: Page | None = None
         self._refmap: RefMap = RefMap()
         self._snapshot_generator = SnapshotGenerator()
+        self._webmcp_tools: list[WebMCPToolDef] = []
 
         # Verify playwright is installed early (fail fast with helpful message)
         try:
@@ -187,13 +192,23 @@ class BrowserDriver:
         # Convert to our AccessibilityNode format
         tree = AccessibilityNode.from_playwright_dict(tree_dict)
 
-        # Generate semantic snapshot
-        snapshot_text, refmap = self._snapshot_generator.generate(tree, title=title, url=url)
+        # Discover WebMCP tools if enabled
+        webmcp_tools: list[WebMCPToolDef] = []
+        if self.webmcp_enabled:
+            from .webmcp.discovery import WebMCPDiscovery
+
+            webmcp_tools = await WebMCPDiscovery.discover(page)
+            self._webmcp_tools = webmcp_tools
+
+        # Generate semantic snapshot (includes WebMCP tools section if any)
+        snapshot_text, refmap = self._snapshot_generator.generate(
+            tree, title=title, url=url, webmcp_tools=webmcp_tools
+        )
 
         # Store refmap for future interactions
         self._refmap = refmap
 
-        return NavigationResult(snapshot=snapshot_text, refmap=refmap)
+        return NavigationResult(snapshot=snapshot_text, refmap=refmap, webmcp_tools=webmcp_tools)
 
     async def navigate(self, url: str) -> NavigationResult:
         """Navigate to a URL and return page snapshot.
