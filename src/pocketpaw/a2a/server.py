@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from importlib.metadata import version as _pkg_version
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from pocketpaw.a2a.models import (
@@ -34,25 +34,50 @@ from pocketpaw.a2a.models import (
     TaskStatus,
     TextPart,
 )
+from pocketpaw.api.deps import require_scope
+from pocketpaw.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-memory task store (sufficient for single-process; Phase 3 may persist)
 # ---------------------------------------------------------------------------
+_MAX_TASKS = 1000
 _tasks: dict[str, Task] = {}
 _cancel_events: dict[str, asyncio.Event] = {}  # task_id → cancellation flag
+
+
+def _store_task(task: Task) -> None:
+    """Store a task and prune old tasks to prevent memory leaks."""
+    if len(_tasks) >= _MAX_TASKS:
+        oldest_id = next(iter(_tasks))
+        _tasks.pop(oldest_id, None)
+        _cancel_events.pop(oldest_id, None)
+    _tasks[task.id] = task
 
 
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
 
+
+def _check_a2a_enabled() -> None:
+    if not get_settings().a2a_enabled:
+        raise HTTPException(status_code=403, detail="A2A protocol is disabled on this agent.")
+
+
 # The agent-card route lives at the well-known path (outside /api prefix)
-well_known_router = APIRouter(tags=["A2A"])
+well_known_router = APIRouter(
+    tags=["A2A"], 
+    dependencies=[Depends(_check_a2a_enabled), Depends(require_scope("chat"))]
+)
 
 # Task endpoints live under /a2a
-tasks_router = APIRouter(prefix="/a2a/tasks", tags=["A2A"])
+tasks_router = APIRouter(
+    prefix="/a2a/tasks", 
+    tags=["A2A"], 
+    dependencies=[Depends(_check_a2a_enabled), Depends(require_scope("chat"))]
+)
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +244,7 @@ async def tasks_send(params: TaskSendParams):
         history=[params.message],
         metadata=params.metadata,
     )
-    _tasks[task_id] = task
+    _store_task(task)
 
     bridge = _A2ASessionBridge(chat_id)
     await bridge.start()
@@ -293,6 +318,7 @@ async def tasks_send(params: TaskSendParams):
 
     finally:
         await bridge.stop()
+        _cancel_events.pop(task_id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +349,7 @@ async def tasks_send_stream(params: TaskSendParams):
         history=[params.message],
         metadata=params.metadata,
     )
-    _tasks[task_id] = task
+    _store_task(task)
 
     bridge = _A2ASessionBridge(chat_id)
     await bridge.start()

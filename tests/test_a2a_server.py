@@ -16,8 +16,9 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from pocketpaw.a2a.models import (
     A2AMessage,
@@ -31,6 +32,7 @@ from pocketpaw.a2a.models import (
 from pocketpaw.a2a.server import (
     _A2ASessionBridge,
     _cancel_events,
+    _check_a2a_enabled,
     _format_sse,
     _tasks,
     tasks_router,
@@ -45,15 +47,31 @@ from pocketpaw.a2a.server import (
 @pytest.fixture
 def test_app():
     """Minimal FastAPI app with both A2A routers mounted."""
+    from fastapi import Request
+    
     app = FastAPI()
+    app.dependency_overrides[_check_a2a_enabled] = lambda: None
+    
+    # A cleaner approach for tests is to inject a dummy API key state that passes.
+    # However, since require_scope just checks request.state:
+    @app.middleware("http")
+    async def mock_auth_middleware(request: Request, call_next):
+        class MockAPIKey:
+            scopes = ["chat", "admin"]
+            
+        request.state.api_key = MockAPIKey()
+        return await call_next(request)
+
     app.include_router(well_known_router)
     app.include_router(tasks_router)
     return app
 
 
-@pytest.fixture
-def client(test_app):
-    return TestClient(test_app, raise_server_exceptions=False)
+@pytest_asyncio.fixture
+async def client(test_app):
+    transport = ASGITransport(app=test_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
 @pytest.fixture(autouse=True)
@@ -120,16 +138,19 @@ class TestModels:
 
 
 class TestAgentCard:
-    def test_agent_card_returns_200(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_returns_200(self, client):
+        resp = await client.get("/.well-known/agent.json")
         assert resp.status_code == 200
 
-    def test_agent_card_content_type(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_content_type(self, client):
+        resp = await client.get("/.well-known/agent.json")
         assert "application/json" in resp.headers.get("content-type", "")
 
-    def test_agent_card_required_fields(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_required_fields(self, client):
+        resp = await client.get("/.well-known/agent.json")
         data = resp.json()
         assert "name" in data
         assert "description" in data
@@ -138,17 +159,20 @@ class TestAgentCard:
         assert "capabilities" in data
         assert "skills" in data
 
-    def test_agent_card_name(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_name(self, client):
+        resp = await client.get("/.well-known/agent.json")
         assert resp.json()["name"] == "PocketPaw"
 
-    def test_agent_card_capabilities_streaming(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_capabilities_streaming(self, client):
+        resp = await client.get("/.well-known/agent.json")
         caps = resp.json()["capabilities"]
         assert caps["streaming"] is True
 
-    def test_agent_card_skills_list(self, client):
-        resp = client.get("/.well-known/agent.json")
+    @pytest.mark.asyncio
+    async def test_agent_card_skills_list(self, client):
+        resp = await client.get("/.well-known/agent.json")
         skills = resp.json()["skills"]
         assert isinstance(skills, list)
         assert len(skills) >= 1
@@ -166,7 +190,7 @@ class TestAgentCard:
 class TestTasksSend:
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_send_returns_completed_task(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_send_returns_completed_task(self, mock_bridge_cls, mock_dispatch, client):
         bridge = MagicMock()
         q = asyncio.Queue()
         bridge.queue = q
@@ -179,10 +203,10 @@ class TestTasksSend:
             await q.put({"type": "chunk", "content": "Here is the answer."})
             await q.put({"type": "stream_end"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
 
         params = _make_send_params()
-        resp = client.post("/a2a/tasks/send", content=params.model_dump_json())
+        resp = await client.post("/a2a/tasks/send", content=params.model_dump_json())
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == "test-task-001"
@@ -191,7 +215,7 @@ class TestTasksSend:
 
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_send_failed_on_error_event(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_send_failed_on_error_event(self, mock_bridge_cls, mock_dispatch, client):
         bridge = MagicMock()
         q = asyncio.Queue()
         bridge.queue = q
@@ -203,21 +227,22 @@ class TestTasksSend:
         async def _load():
             await q.put({"type": "error", "message": "Something went wrong"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
 
         params = _make_send_params()
-        resp = client.post("/a2a/tasks/send", content=params.model_dump_json())
+        resp = await client.post("/a2a/tasks/send", content=params.model_dump_json())
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"]["state"] == TaskState.FAILED
 
-    def test_send_invalid_body_returns_422(self, client):
-        resp = client.post("/a2a/tasks/send", json={"bad": "body"})
+    @pytest.mark.asyncio
+    async def test_send_invalid_body_returns_422(self, client):
+        resp = await client.post("/a2a/tasks/send", json={"bad": "body"})
         assert resp.status_code == 422
 
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_send_stores_task_history(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_send_stores_task_history(self, mock_bridge_cls, mock_dispatch, client):
         bridge = MagicMock()
         q = asyncio.Queue()
         bridge.queue = q
@@ -230,10 +255,10 @@ class TestTasksSend:
             await q.put({"type": "chunk", "content": "Done."})
             await q.put({"type": "stream_end"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
 
         params = _make_send_params()
-        resp = client.post("/a2a/tasks/send", content=params.model_dump_json())
+        resp = await client.post("/a2a/tasks/send", content=params.model_dump_json())
         data = resp.json()
         # history should include the original user message + agent reply
         assert len(data["history"]) >= 2
@@ -247,11 +272,13 @@ class TestTasksSend:
 
 
 class TestTasksGet:
-    def test_get_task_not_found(self, client):
-        resp = client.get("/a2a/tasks/nonexistent-id")
+    @pytest.mark.asyncio
+    async def test_get_task_not_found(self, client):
+        resp = await client.get("/a2a/tasks/nonexistent-id")
         assert resp.status_code == 404
 
-    def test_get_task_found(self, client):
+    @pytest.mark.asyncio
+    async def test_get_task_found(self, client):
         # Pre-seed the store
         task = Task(
             id="known-task",
@@ -259,7 +286,7 @@ class TestTasksGet:
         )
         _tasks["known-task"] = task
 
-        resp = client.get("/a2a/tasks/known-task")
+        resp = await client.get("/a2a/tasks/known-task")
         assert resp.status_code == 200
         data = resp.json()
         assert data["id"] == "known-task"
@@ -272,11 +299,13 @@ class TestTasksGet:
 
 
 class TestTasksCancel:
-    def test_cancel_nonexistent_task(self, client):
-        resp = client.post("/a2a/tasks/ghost-task/cancel")
+    @pytest.mark.asyncio
+    async def test_cancel_nonexistent_task(self, client):
+        resp = await client.post("/a2a/tasks/ghost-task/cancel")
         assert resp.status_code == 404
 
-    def test_cancel_sets_state(self, client):
+    @pytest.mark.asyncio
+    async def test_cancel_sets_state(self, client):
         task = Task(
             id="cancel-me",
             status=TaskStatus(state=TaskState.WORKING),
@@ -285,7 +314,7 @@ class TestTasksCancel:
         cancel_evt = asyncio.Event()
         _cancel_events["cancel-me"] = cancel_evt
 
-        resp = client.post("/a2a/tasks/cancel-me/cancel")
+        resp = await client.post("/a2a/tasks/cancel-me/cancel")
         assert resp.status_code == 200
         assert resp.json()["status"] == "canceled"
         assert _tasks["cancel-me"].status.state == TaskState.CANCELED
@@ -300,7 +329,7 @@ class TestTasksCancel:
 class TestTasksSendStream:
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_stream_returns_sse_content_type(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_stream_returns_sse_content_type(self, mock_bridge_cls, mock_dispatch, client):
         bridge = MagicMock()
         q = asyncio.Queue()
         bridge.queue = q
@@ -313,9 +342,10 @@ class TestTasksSendStream:
             await q.put({"type": "chunk", "content": "Streaming..."})
             await q.put({"type": "stream_end"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
         params = _make_send_params(task_id="stream-task")
-        with client.stream(
+        
+        async with client.stream(
             "POST", "/a2a/tasks/send/stream", content=params.model_dump_json()
         ) as resp:
             assert resp.status_code == 200
@@ -323,7 +353,7 @@ class TestTasksSendStream:
 
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_stream_sse_events_valid_format(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_stream_sse_events_valid_format(self, mock_bridge_cls, mock_dispatch, client):
         """Each SSE event must follow: event: <type>\\ndata: <json>\\n\\n"""
         bridge = MagicMock()
         q = asyncio.Queue()
@@ -337,12 +367,13 @@ class TestTasksSendStream:
             await q.put({"type": "chunk", "content": "partial answer"})
             await q.put({"type": "stream_end"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
         params = _make_send_params(task_id="sse-val")
-        with client.stream(
+        async with client.stream(
             "POST", "/a2a/tasks/send/stream", content=params.model_dump_json()
         ) as resp:
-            raw = resp.read().decode()
+            raw = await resp.aread()
+            raw = raw.decode()
 
         events = [e.strip() for e in raw.split("\n\n") if e.strip()]
         assert len(events) >= 2
@@ -360,7 +391,9 @@ class TestTasksSendStream:
 
     @patch("pocketpaw.a2a.server._dispatch_to_agent")
     @patch("pocketpaw.a2a.server._A2ASessionBridge")
-    def test_stream_final_event_has_completed_state(self, mock_bridge_cls, mock_dispatch, client):
+    async def test_stream_final_event_has_completed_state(
+        self, mock_bridge_cls, mock_dispatch, client
+    ):
         bridge = MagicMock()
         q = asyncio.Queue()
         bridge.queue = q
@@ -373,12 +406,13 @@ class TestTasksSendStream:
             await q.put({"type": "chunk", "content": "Final answer."})
             await q.put({"type": "stream_end"})
 
-        asyncio.get_event_loop().run_until_complete(_load())
+        await _load()
         params = _make_send_params(task_id="final-test")
-        with client.stream(
+        async with client.stream(
             "POST", "/a2a/tasks/send/stream", content=params.model_dump_json()
         ) as resp:
-            raw = resp.read().decode()
+            raw = await resp.aread()
+            raw = raw.decode()
 
         events = [e.strip() for e in raw.split("\n\n") if e.strip()]
         final = events[-1]
