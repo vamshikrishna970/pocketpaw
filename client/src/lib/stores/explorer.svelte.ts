@@ -1,6 +1,7 @@
 import type { FileEntry, DefaultDirs, FileChangeEvent } from "$lib/filesystem";
 import { localFs, joinPath, getFileName, parentDir, invalidateThumbnail, isImageFile } from "$lib/filesystem";
 import type { WSOpenPath } from "$lib/api/types";
+import type { SemanticSearchResult } from "$lib/api/client";
 import { connectionStore } from "./connection.svelte";
 
 export interface Breadcrumb {
@@ -102,6 +103,11 @@ class ExplorerStore {
   clipboardMode = $state<"copy" | "cut" | null>(null);
   openFileChangedOnDisk = $state(0);
   webPreviewUrl = $state<string | null>(null);
+
+  // ─── Semantic Search State ──────────────────────────────────
+  semanticSearchEnabled = $state(false);
+  semanticResults = $state<SemanticSearchResult[]>([]);
+  semanticSearchLoading = $state(false);
 
   private unwatchFn: (() => void) | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -855,6 +861,35 @@ class ExplorerStore {
     } catch {
       // Watching not available
     }
+  }
+
+  // ─── Semantic Search ───────────────────────────────────────
+
+  private semanticDebounce: ReturnType<typeof setTimeout> | null = null;
+
+  async performSemanticSearch(query: string): Promise<void> {
+    if (!query.trim() || !this.semanticSearchEnabled) return;
+    this.semanticSearchLoading = true;
+    try {
+      let client;
+      try {
+        client = connectionStore.getClient();
+      } catch {
+        return;
+      }
+      const resp = await client.semanticSearch(query, { top_k: 20, mode: "hybrid" });
+      this.semanticResults = resp.results;
+    } catch (e) {
+      console.error("Semantic search failed:", e);
+      this.semanticResults = [];
+    } finally {
+      this.semanticSearchLoading = false;
+    }
+  }
+
+  debouncedSemanticSearch(query: string): void {
+    if (this.semanticDebounce) clearTimeout(this.semanticDebounce);
+    this.semanticDebounce = setTimeout(() => this.performSemanticSearch(query), 500);
   }
 
   private stopWatching(): void {

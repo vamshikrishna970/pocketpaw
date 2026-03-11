@@ -276,6 +276,42 @@ async def startup_event(
     except Exception as e:
         logger.warning("Failed to initialize health engine: %s", e)
 
+    # Initialize semantic search if enabled
+    if settings.search_enabled:
+        try:
+            from pocketpaw.search import initialize_search
+
+            search_components = await initialize_search(
+                api_key=settings.search_gemini_api_key,
+                model=settings.search_embedding_model,
+                vector_backend=settings.search_vector_backend,
+                dimensions=settings.search_embedding_dimensions,
+                blocklist=settings.search_index_blocklist,
+                allowlist=settings.search_index_allowlist,
+                max_file_size_mb=settings.search_max_file_size_mb,
+                video_depth=settings.search_video_analysis_depth,
+            )
+
+            # Auto-index configured directories
+            if settings.search_auto_index_dirs:
+                indexer = search_components["indexer"]
+                for directory in settings.search_auto_index_dirs:
+                    asyncio.create_task(indexer.index_directory(directory))
+
+            # Start file watcher
+            if settings.search_auto_index_dirs:
+                from pocketpaw.search.watcher import FileWatcher
+
+                watcher = FileWatcher(
+                    indexer=search_components["indexer"],
+                    directories=settings.search_auto_index_dirs,
+                )
+                await watcher.start()
+
+            logger.info("Semantic search initialized")
+        except Exception as e:
+            logger.warning("Failed to initialize semantic search: %s", e)
+
     # Register audit log callback for live updates
     audit_logger = get_audit_logger()
     audit_logger.on_log(lambda entry: asyncio.ensure_future(_broadcast_audit_entry(entry)))

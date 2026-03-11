@@ -914,6 +914,56 @@ async def websocket_handler(
                 ]
                 await websocket.send_json({"type": "skills", "skills": skills})
 
+            # Semantic search
+            elif action == "search":
+                query = data.get("query", "")
+                options = data.get("options", {})
+                if not query:
+                    await websocket.send_json(
+                        {"type": "search_results", "results": [], "took_ms": 0}
+                    )
+                else:
+                    try:
+                        from pocketpaw.search import get_search_service
+
+                        svc = get_search_service()
+                        if svc is None:
+                            await websocket.send_json(
+                                {"type": "error", "content": "Search not initialized"}
+                            )
+                        else:
+                            import time
+
+                            start = time.monotonic()
+                            results = await svc.search(
+                                query,
+                                top_k=options.get("top_k", 10),
+                                file_types=options.get("file_types"),
+                                extensions=options.get("extensions"),
+                                directories=options.get("directories"),
+                                search_mode=options.get("mode", "hybrid"),
+                            )
+                            took = (time.monotonic() - start) * 1000
+                            await websocket.send_json(
+                                {
+                                    "type": "search_results",
+                                    "results": [
+                                        {
+                                            "id": r.id,
+                                            "score": r.score,
+                                            "metadata": r.metadata,
+                                        }
+                                        for r in results
+                                    ],
+                                    "took_ms": round(took, 1),
+                                }
+                            )
+                    except Exception as e:
+                        logger.warning("WebSocket search error: %s", e)
+                        await websocket.send_json(
+                            {"type": "error", "content": f"Search error: {e}"}
+                        )
+
             elif action == "run_skill":
                 skill_name = data.get("name", "")
                 skill_args = data.get("args", "")

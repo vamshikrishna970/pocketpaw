@@ -1057,4 +1057,44 @@ export class PocketPawClient {
   async dwRetryTask(projectId: string, taskId: string): Promise<Record<string, unknown>> {
     return this.dwRequest("POST", `/projects/${encodeURIComponent(projectId)}/tasks/${encodeURIComponent(taskId)}/retry`);
   }
+
+  // ── Semantic Search ────────────────────────────────────────────────
+
+  async semanticSearch(
+    query: string,
+    options?: {
+      top_k?: number;
+      mode?: "metadata" | "content" | "hybrid";
+      file_types?: string;
+    },
+  ): Promise<SemanticSearchResponse> {
+    const params = new URLSearchParams({ q: query });
+    if (options?.top_k) params.set("top_k", String(options.top_k));
+    if (options?.mode) params.set("mode", options.mode);
+    if (options?.file_types) params.set("file_types", options.file_types);
+    return this.get<SemanticSearchResponse>(`/search?${params}`);
+  }
+
+  async triggerIndex(path: string, recursive = true): Promise<{ status: string; path: string }> {
+    return this.post("/search/index", { path, recursive });
+  }
+
+  async removeFromIndex(path: string): Promise<{ status: string; files_removed: number }> {
+    return this.del(`/search/index?path=${encodeURIComponent(path)}`);
+  }
+
+  async getSearchStats(): Promise<{ total_files: number; total_chunks: number }> {
+    return this.get("/search/stats");
+  }
+}
+
+export interface SemanticSearchResult {
+  id: string;
+  score: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface SemanticSearchResponse {
+  results: SemanticSearchResult[];
+  took_ms: number;
 }

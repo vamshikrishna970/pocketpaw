@@ -27,7 +27,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "group:browser": ["browser"],
     "group:memory": ["remember", "recall", "forget"],
     "group:desktop": ["desktop", "system_info"],
-    "group:search": ["web_search", "url_extract"],
+    "group:search": ["web_search", "url_extract", "semantic_search"],
     "group:skills": ["create_skill", "skill"],
     "group:gmail": ["gmail_search", "gmail_read", "gmail_send"],
     "group:calendar": ["calendar_list", "calendar_create", "calendar_prep"],

@@ -115,6 +115,21 @@ export interface Settings {
   stt_model?: string;
   ocr_provider?: string;
 
+  // Search & Indexing
+  search_enabled?: boolean;
+  search_gemini_api_key?: string;
+  search_use_oauth?: boolean;
+  search_embedding_model?: string;
+  search_embedding_dimensions?: number;
+  search_vector_backend?: string;
+  search_auto_index_dirs?: string[];
+  search_auto_enrich?: boolean;
+  search_max_file_size_mb?: number;
+  search_video_analysis_depth?: string;
+  search_batch_size?: number;
+  search_index_blocklist?: string[];
+  search_index_allowlist?: string[];
+
   // User preferences (onboarding)
   user_display_name?: string;
   user_avatar_emoji?: string;

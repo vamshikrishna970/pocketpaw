@@ -134,6 +134,16 @@ sarvam = [
 mcp = [
     "mcp>=1.0.0",
 ]
+search = [
+    "google-genai>=1.0.0",
+    "chromadb>=0.6.0",
+    "watchfiles>=1.0.0",
+]
+search-full = [
+    "pocketpaw[search]",
+    "pymupdf>=1.25.0",
+    "python-docx>=1.1.0",
+]
 # --- Composite extras ---
 recommended = [
     "pocketpaw[browser,memory,desktop]",
@@ -145,7 +155,7 @@ all-channels = [
     "pocketpaw[telegram,discord,slack,whatsapp-personal,matrix,teams,gchat]",
 ]
 all-tools = [
-    "pocketpaw[browser,desktop,image,extract,voice,ocr,sarvam,mcp,memory]",
+    "pocketpaw[browser,desktop,image,extract,voice,ocr,sarvam,mcp,memory,search]",
 ]
 all-backends = [
     "pocketpaw[openai-agents,google-adk,copilot-sdk]",

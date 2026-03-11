@@ -436,6 +436,51 @@ class Settings(BaseSettings):
         default="auto", description="URL extract provider: 'auto', 'parallel', or 'local'"
     )
 
+    # ── Search & Indexing (Gemini Embedding 2.0) ─────────────────────
+    search_enabled: bool = Field(default=False, description="Enable semantic search")
+    search_gemini_api_key: str = Field(default="", description="Gemini API key for embeddings")
+    search_use_oauth: bool = Field(default=True, description="Try Google OAuth before API key")
+    search_embedding_model: str = Field(
+        default="gemini-embedding-2-preview",
+        description="Gemini embedding model name",
+    )
+    search_embedding_dimensions: int = Field(
+        default=768, description="Embedding dimensions (128-3072)"
+    )
+    search_vector_backend: str = Field(
+        default="auto", description="Vector backend: 'auto', 'zvec', 'chroma'"
+    )
+    search_auto_index_dirs: list[str] = Field(
+        default_factory=list, description="Directories to auto-index on startup"
+    )
+    search_auto_enrich: bool = Field(
+        default=False, description="Auto-enrich agent context with relevant files"
+    )
+    search_max_file_size_mb: int = Field(default=50, description="Max file size to index (MB)")
+    search_video_analysis_depth: str = Field(
+        default="keyframes", description="Video analysis: 'keyframes' or 'full'"
+    )
+    search_batch_size: int = Field(default=32, description="Chunks per embedding API call")
+    search_index_blocklist: list[str] = Field(
+        default_factory=lambda: [
+            ".git",
+            "node_modules",
+            "__pycache__",
+            ".venv",
+            "venv",
+            ".env",
+            "dist",
+            "build",
+            ".next",
+            ".cache",
+        ],
+        description="Directories/patterns to skip during indexing",
+    )
+    search_index_allowlist: list[str] = Field(
+        default_factory=list,
+        description="If non-empty, only index files matching these patterns",
+    )
+
     # Image Generation
     google_api_key: str | None = Field(default=None, description="Google API key (for Gemini)")
     image_model: str = Field(

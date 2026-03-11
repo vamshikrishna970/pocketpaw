@@ -472,7 +472,20 @@ class AgentLoop:
                     "</identity-reminder>"
                 )
 
-            # 2c. Emit thinking event
+            # 2c. Auto-enrich with semantically relevant files from workspace index
+            if self.settings.search_enabled and self.settings.search_auto_enrich:
+                try:
+                    from pocketpaw.search import get_enrichment
+
+                    enrichment = get_enrichment()
+                    if enrichment:
+                        enrich_ctx = await enrichment.enrich(content)
+                        if enrich_ctx:
+                            system_prompt += f"\n\n{enrich_ctx}"
+                except Exception:
+                    logger.debug("Search auto-enrichment failed", exc_info=True)
+
+            # 2d. Emit thinking event
             await self.bus.publish_system(
                 SystemEvent(event_type="thinking", data={"session_key": session_key})
             )

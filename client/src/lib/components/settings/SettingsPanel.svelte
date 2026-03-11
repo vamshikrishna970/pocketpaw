@@ -1,11 +1,12 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { toggleMode, mode } from "mode-watcher";
-  import { ArrowLeft, Bot, Radio, Shield, Info, Sun, Moon } from "@lucide/svelte";
+  import { ArrowLeft, Bot, Radio, Shield, Info, Sun, Moon, Search } from "@lucide/svelte";
   import type { Component } from "svelte";
   import TabAIModel from "./TabAIModel.svelte";
   import TabChannels from "./TabChannels.svelte";
   import TabSecurity from "./TabSecurity.svelte";
+  import TabSearch from "./TabSearch.svelte";
   import TabAbout from "./TabAbout.svelte";
 
   interface Section {
@@ -19,6 +20,7 @@
     { id: "ai-model", label: "AI Model", icon: Bot, component: TabAIModel },
     { id: "channels", label: "Channels", icon: Radio, component: TabChannels },
     { id: "security", label: "Security", icon: Shield, component: TabSecurity },
+    { id: "search", label: "Search", icon: Search, component: TabSearch },
     { id: "about", label: "About", icon: Info, component: TabAbout },
   ];
 
