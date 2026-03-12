@@ -1,5 +1,8 @@
 """
 Claude Agent SDK backend for PocketPaw.
+Updated: 2026-03-11 — Always bypass permissions in headless mode. Without this,
+  tool calls (like memory save via Bash) hang on messaging channels (Telegram,
+  Discord, Slack) because there's no terminal to approve permission prompts.
 
 Uses the official Claude Agent SDK (pip install claude-agent-sdk) which provides:
 - Built-in tools: Bash, Read, Write, Edit, Glob, Grep, WebSearch, WebFetch
@@ -75,7 +78,7 @@ class ClaudeSDKBackend:
             ],
             tool_policy_map=ClaudeSDKBackend._TOOL_POLICY_MAP,
             required_keys=["anthropic_api_key"],
-            supported_providers=["anthropic", "ollama", "openai_compatible"],
+            supported_providers=["anthropic", "ollama", "openrouter", "openai_compatible"],
         )
 
     def __init__(self, settings: Settings):
@@ -502,6 +505,23 @@ class ClaudeSDKBackend:
                         break
                     yield AgentEvent(type="message", content=text)
 
+                # Extract usage from the final message
+                final_msg = stream.get_final_message()
+                if final_msg and hasattr(final_msg, "usage") and final_msg.usage:
+                    u = final_msg.usage
+                    yield AgentEvent(
+                        type="token_usage",
+                        content="",
+                        metadata={
+                            "input_tokens": getattr(u, "input_tokens", 0),
+                            "output_tokens": getattr(u, "output_tokens", 0),
+                            "cached_input_tokens": getattr(u, "cache_read_input_tokens", 0)
+                            + getattr(u, "cache_creation_input_tokens", 0),
+                            "model": model,
+                            "backend": "claude_agent_sdk",
+                        },
+                    )
+
             yield AgentEvent(type="done", content="")
 
         except Exception as e:
@@ -533,8 +553,8 @@ class ClaudeSDKBackend:
         if self._client is not None:
             try:
                 await self._client.disconnect()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to disconnect Claude client: %s", e)
             self._client = None
 
         # Create and connect new client
@@ -551,8 +571,8 @@ class ClaudeSDKBackend:
         if self._client is not None:
             try:
                 await self._client.disconnect()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to disconnect Claude client: %s", e)
             self._client = None
             self._client_options_key = None
             self._client_in_use = False
@@ -673,7 +693,7 @@ class ClaudeSDKBackend:
                             "an Anthropic API key.\n\n"
                             "**How to fix:**\n"
                             "1. Get an API key at "
-                            "[console.anthropic.com](https://console.anthropic.com/api-keys)\n"
+                            "[console.anthropic.com](https://console.anthropic.com/settings/keys)\n"
                             "2. Add it in **Settings > API Keys > Anthropic API Key**\n"
                             "3. Or set the `ANTHROPIC_API_KEY` environment variable\n\n"
                             "*Alternatively, switch to **Ollama (Local)** in Settings "
@@ -824,12 +844,13 @@ class ClaudeSDKBackend:
             if self._StreamEvent is not None:
                 options_kwargs["include_partial_messages"] = True
 
-            # Permission handling — PocketPaw runs headless (web/chat), so
-            # there is no terminal to show interactive permission prompts.
-            # bypassPermissions auto-approves ALL tool calls (including MCP).
+            # Permission handling — PocketPaw always runs headless (web dashboard,
+            # Telegram, Discord, Slack, etc.) with no terminal for interactive
+            # permission prompts. Without bypassPermissions, tool calls that need
+            # approval (like Bash — used by memory save, web search, etc.) hang
+            # indefinitely on messaging channels.
             # Dangerous Bash commands are still caught by the PreToolUse hook.
-            if self.settings.bypass_permissions:
-                options_kwargs["permission_mode"] = "bypassPermissions"
+            options_kwargs["permission_mode"] = "bypassPermissions"
 
             # Model selection for Anthropic providers:
             # 1. Smart routing (opt-in) — overrides with complexity-based model
@@ -1020,6 +1041,28 @@ class ClaudeSDKBackend:
                         is_error = getattr(event, "is_error", False)
                         result = getattr(event, "result", "")
 
+                        # Extract token usage from ResultMessage
+                        # Per SDK docs: ResultMessage has total_cost_usd and usage dict
+                        total_cost = getattr(event, "total_cost_usd", None)
+                        usage = getattr(event, "usage", None) or {}
+                        if isinstance(usage, dict) and (usage or total_cost):
+                            _model_name = options_kwargs.get("model", "claude")
+                            yield AgentEvent(
+                                type="token_usage",
+                                content="",
+                                metadata={
+                                    "input_tokens": usage.get("input_tokens", 0),
+                                    "output_tokens": usage.get("output_tokens", 0),
+                                    "cached_input_tokens": usage.get("cache_read_input_tokens", 0)
+                                    + usage.get("cache_creation_input_tokens", 0),
+                                    "total_cost_usd": total_cost,
+                                    "model": _model_name
+                                    if isinstance(_model_name, str)
+                                    else "claude",
+                                    "backend": "claude_agent_sdk",
+                                },
+                            )
+
                         if is_error:
                             logger.error(f"ResultMessage error: {result}")
                             yield AgentEvent(type="error", content=str(result))
@@ -1043,8 +1086,8 @@ class ClaudeSDKBackend:
                     )
                     try:
                         await self._client.disconnect()
-                    except Exception:
-                        pass
+                    except Exception as exc:  # noqa: BLE001
+                        logger.debug("Failed to disconnect client during cleanup: %s", exc)
                     self._client = None
                     self._client_options_key = None
 
@@ -1093,8 +1136,8 @@ class ClaudeSDKBackend:
         if self._client is not None:
             try:
                 await self._client.interrupt()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to interrupt Claude client: %s", e)
         await self.cleanup()
         logger.info("🛑 Claude Agent SDK stop requested")
 
