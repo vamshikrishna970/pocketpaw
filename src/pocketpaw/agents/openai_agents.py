@@ -161,79 +161,31 @@ class OpenAIAgentsBackend:
         return self._custom_tools
 
     def _build_model(self) -> Any:
-        """Build the model instance, supporting Ollama, LiteLLM, and OpenAI-compat."""
-        model_name = self.settings.openai_agents_model or self.settings.openai_model or "gpt-5.2"
+        """Build the model instance via provider adapters."""
+        from pocketpaw.llm.providers import get_adapter
 
-        # Per-backend provider setting, with fallback to global llm_provider
         provider = (
             getattr(self.settings, "openai_agents_provider", "") or self.settings.llm_provider
         )
+        if provider == "auto" and self.settings.openai_compatible_base_url:
+            provider = "openai_compatible"
 
-        # LiteLLM: prefer the native LitellmModel extension if available,
-        # otherwise fall back to OpenAIChatCompletionsModel pointed at the proxy.
-        if provider == "litellm":
-            litellm_model = self.settings.litellm_model or model_name
-            try:
-                from agents.extensions.models.litellm_model import LitellmModel
+        # Default (native OpenAI) -- just return the model name string
+        if provider in ("openai", "auto"):
+            return self.settings.openai_agents_model or self.settings.openai_model or "gpt-5.2"
 
-                logger.info(
-                    "Using LitellmModel (direct SDK integration) with model=%s",
-                    litellm_model,
-                )
-                return LitellmModel(
-                    model=litellm_model,
-                    api_key=self.settings.litellm_api_key,
-                    base_url=self.settings.litellm_api_base,
-                )
-            except ImportError:
-                logger.info(
-                    "LitellmModel not available (install openai-agents[litellm]). "
-                    "Falling back to OpenAI-compat proxy mode."
-                )
-                from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
-                from openai import AsyncOpenAI
+        adapter = get_adapter(provider)
+        config = adapter.resolve_config(self.settings, backend="openai_agents")
 
-                base_url = self.settings.litellm_api_base.rstrip("/") + "/v1"
-                client = AsyncOpenAI(
-                    base_url=base_url,
-                    api_key=self.settings.litellm_api_key or "not-needed",
-                )
-                return OpenAIChatCompletionsModel(model=litellm_model, openai_client=client)
+        # LiteLLM: prefer native SDK model wrapper
+        if hasattr(adapter, "build_agents_model"):
+            return adapter.build_agents_model(config)
 
-        # If Ollama, OpenRouter, or OpenAI-compatible endpoint is configured,
-        # use OpenAIChatCompletionsModel
-        if provider in ("ollama", "openai_compatible", "openrouter") or (
-            provider == "auto" and self.settings.openai_compatible_base_url
-        ):
-            from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
-            from openai import AsyncOpenAI
+        # All other providers: wrap in OpenAIChatCompletionsModel
+        from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 
-            if provider == "ollama":
-                base_url = self.settings.ollama_host.rstrip("/") + "/v1"
-                model_name = self.settings.ollama_model
-                client = AsyncOpenAI(base_url=base_url, api_key="ollama")
-            elif provider == "openrouter":
-                base_url = "https://openrouter.ai/api/v1"
-                api_key = (
-                    self.settings.openrouter_api_key
-                    or self.settings.openai_compatible_api_key
-                    or "none"
-                )
-                model_name = (
-                    self.settings.openrouter_model
-                    or self.settings.openai_compatible_model
-                    or model_name
-                )
-                client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-            else:
-                base_url = self.settings.openai_compatible_base_url
-                api_key = self.settings.openai_compatible_api_key or "none"
-                model_name = self.settings.openai_compatible_model or model_name
-                client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-
-            return OpenAIChatCompletionsModel(model=model_name, openai_client=client)
-
-        return model_name
+        client = adapter.build_openai_client(config)
+        return OpenAIChatCompletionsModel(model=config.model, openai_client=client)
 
     async def run(
         self,
