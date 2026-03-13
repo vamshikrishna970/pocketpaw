@@ -1,0 +1,24 @@
+services:
+  pocketpaw-discord:
+    build:
+      context: .
+      dockerfile: Dockerfile.discord
+    container_name: pocketpaw-discord
+    volumes:
+      - pocketpaw-discord-data:/home/pocketpaw/.pocketpaw
+      # Mount custom read-only identity (overrides default system prompt)
+      - ./deploy/discord/identity:/home/pocketpaw/.pocketpaw/identity:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: .env.discord
+        required: true
+    environment:
+      # resolve_backend_env() syncs POCKETPAW_* keys to SDK env vars at
+      # startup, so no manual ANTHROPIC_API_KEY / OPENAI_API_KEY mapping
+      # is needed here. Just pass POCKETPAW_* via .env.discord.
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  pocketpaw-discord-data:
