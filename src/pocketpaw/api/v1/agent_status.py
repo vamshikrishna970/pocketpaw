@@ -1,6 +1,3 @@
-# Agent status API — polling and SSE stream for external integrations.
-# Created: 2026-03-12
-
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +7,8 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
+from pocketpaw.api.v1.schemas.status import AgentStatusResponse
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Status"])
@@ -17,12 +16,21 @@ router = APIRouter(tags=["Status"])
 _DEBOUNCE_MS = 200
 
 
-def _check_status_key(request: Request, key: str | None = None):
-    """Validate optional status API key from header or query param."""
+def _get_status_api_key() -> str:
+    """Return the configured status API key (cached after first call)."""
+    cached = getattr(_get_status_api_key, "_value", None)
+    if cached is not None:
+        return cached
     from pocketpaw.config import Settings
 
-    settings = Settings.load()
-    expected = settings.status_api_key
+    key = Settings.load().status_api_key
+    _get_status_api_key._value = key  # type: ignore[attr-defined]
+    return key
+
+
+def _check_status_key(request: Request, key: str | None = None) -> None:
+    """Validate optional status API key from header or query param."""
+    expected = _get_status_api_key()
     if not expected:
         return  # No key configured, allow all
 
@@ -31,7 +39,7 @@ def _check_status_key(request: Request, key: str | None = None):
         raise HTTPException(status_code=403, detail="Invalid or missing status API key")
 
 
-@router.get("/agent/status")
+@router.get("/agent/status", response_model=AgentStatusResponse)
 async def get_agent_status(request: Request, key: str | None = Query(None)):
     """Return current agent state: global status and per-session breakdown.
 
@@ -60,14 +68,20 @@ async def agent_status_stream(request: Request, key: str | None = Query(None)):
         try:
             # Send initial snapshot immediately
             snap = status_tracker.snapshot()
+            last_version = status_tracker.version
             yield f"event: status\ndata: {json.dumps(snap)}\n\n"
 
             while True:
-                changed = await status_tracker.wait_for_change(timeout=30.0)
+                if await request.is_disconnected():
+                    return
+                changed = await status_tracker.wait_for_change(
+                    since_version=last_version, timeout=30.0
+                )
                 if changed:
                     # Debounce: wait a bit for rapid successive events to settle
                     await asyncio.sleep(_DEBOUNCE_MS / 1000)
                     snap = status_tracker.snapshot()
+                    last_version = status_tracker.version
                     yield f"event: status\ndata: {json.dumps(snap)}\n\n"
                 else:
                     # Keepalive every 30s

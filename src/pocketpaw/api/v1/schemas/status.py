@@ -1,9 +1,6 @@
-# Agent status response schemas.
-# Created: 2026-03-12
-
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionStatus(BaseModel):
@@ -32,5 +29,7 @@ class GlobalStatus(BaseModel):
 class AgentStatusResponse(BaseModel):
     """Full agent status response."""
 
-    global_status: GlobalStatus
+    global_status: GlobalStatus = Field(alias="global")
     sessions: list[SessionStatus] = []
+
+    model_config = {"populate_by_name": True}

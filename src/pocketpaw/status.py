@@ -1,6 +1,3 @@
-# StatusTracker — maintains real-time per-session agent state.
-# Created: 2026-03-12
-
 from __future__ import annotations
 
 import asyncio
@@ -42,6 +39,9 @@ class StatusTracker:
         self._max_concurrent = max_concurrent
         self._start_time = time.monotonic()
         self._subscribed = False
+        # Monotonic counter bumped on every state change; waiters compare
+        # their last-seen value to detect changes without a race.
+        self._version = 0
         self._change_event = asyncio.Event()
 
     # ── Bus wiring ──────────────────────────────────────────────────────
@@ -69,6 +69,11 @@ class StatusTracker:
 
     # ── Event handler ───────────────────────────────────────────────────
 
+    def _notify(self) -> None:
+        """Bump version and wake any waiters."""
+        self._version += 1
+        self._change_event.set()
+
     async def _on_event(self, evt: SystemEvent) -> None:
         """Process a system event and update session state."""
         data = evt.data or {}
@@ -83,7 +88,7 @@ class StatusTracker:
             self._sessions[session_key] = _SessionState(
                 session_key=session_key, started_at=now, state_changed_at=now
             )
-            self._change_event.set()
+            self._notify()
 
         elif etype == "thinking":
             s = self._sessions.get(session_key)
@@ -91,7 +96,7 @@ class StatusTracker:
                 s.state = "thinking"
                 s.tool_name = None
                 s.state_changed_at = now
-                self._change_event.set()
+                self._notify()
 
         elif etype == "tool_start":
             s = self._sessions.get(session_key)
@@ -99,7 +104,7 @@ class StatusTracker:
                 s.state = "tool_running"
                 s.tool_name = data.get("name") or data.get("tool")
                 s.state_changed_at = now
-                self._change_event.set()
+                self._notify()
 
         elif etype == "tool_result":
             s = self._sessions.get(session_key)
@@ -107,7 +112,7 @@ class StatusTracker:
                 s.state = "streaming"
                 s.tool_name = None
                 s.state_changed_at = now
-                self._change_event.set()
+                self._notify()
 
         elif etype == "ask_user_question":
             s = self._sessions.get(session_key)
@@ -115,7 +120,7 @@ class StatusTracker:
                 s.state = "waiting_for_user"
                 s.tool_name = None
                 s.state_changed_at = now
-                self._change_event.set()
+                self._notify()
 
         elif etype == "token_usage":
             s = self._sessions.get(session_key)
@@ -130,7 +135,7 @@ class StatusTracker:
                 s.error_message = data.get("message", "Unknown error")
                 s.tool_name = None
                 s.state_changed_at = now
-                self._change_event.set()
+                self._notify()
                 # Schedule cleanup after TTL
                 try:
                     loop = asyncio.get_running_loop()
@@ -143,9 +148,23 @@ class StatusTracker:
 
         elif etype == "agent_end":
             self._sessions.pop(session_key, None)
-            self._change_event.set()
+            self._notify()
 
     # ── Snapshot ────────────────────────────────────────────────────────
+
+    def _get_session_titles(self) -> dict[str, str]:
+        """Load session titles from memory (best-effort)."""
+        try:
+            from pocketpaw.memory import get_memory_manager
+
+            mgr = get_memory_manager()
+            store = mgr._store
+            if hasattr(store, "rebuild_session_index"):
+                index = store._load_session_index()
+                return {k: v.get("title", "") for k, v in index.items() if v.get("title")}
+        except Exception:
+            pass
+        return {}
 
     def snapshot(self) -> dict:
         """Return the current status as a JSON-serializable dict."""
@@ -180,18 +199,13 @@ class StatusTracker:
             )
 
         # Enrich session titles from memory (best-effort)
-        try:
-            from pocketpaw.memory import get_memory_manager
-
-            mgr = get_memory_manager()
-            index = mgr._store._load_session_index()
+        if sessions:
+            titles = self._get_session_titles()
             for session in sessions:
                 safe_key = session["session_key"].replace(":", "_")
-                meta = index.get(safe_key, {})
-                if meta.get("title"):
-                    session["title"] = meta["title"]
-        except Exception:
-            pass
+                title = titles.get(safe_key)
+                if title:
+                    session["title"] = title
 
         return {
             "global": {
@@ -203,11 +217,26 @@ class StatusTracker:
             "sessions": sessions,
         }
 
-    async def wait_for_change(self, timeout: float = 30.0) -> bool:
-        """Wait for a state change. Returns True if changed, False on timeout."""
+    async def wait_for_change(self, since_version: int = -1, timeout: float = 30.0) -> bool:
+        """Wait for a state change. Returns True if changed, False on timeout.
+
+        Pass ``since_version`` (from a previous ``version`` read) to avoid
+        the race between clearing the event and waiting on it.
+        """
+        # If the version already advanced past what the caller saw, return immediately.
+        if since_version >= 0 and self._version > since_version:
+            return True
         self._change_event.clear()
+        # Re-check after clearing to avoid the clear/set race.
+        if since_version >= 0 and self._version > since_version:
+            return True
         try:
             await asyncio.wait_for(self._change_event.wait(), timeout=timeout)
             return True
         except TimeoutError:
             return False
+
+    @property
+    def version(self) -> int:
+        """Monotonic counter incremented on every state change."""
+        return self._version
