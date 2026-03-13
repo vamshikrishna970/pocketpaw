@@ -677,10 +677,11 @@ class ClaudeSDKBackend:
             str(24 * 60 * 60 * 1000),  # 24 hours in ms
         )
 
+        _stderr_lines: list[str] = []
         try:
-            # Resolve LLM provider early — needed for routing + env.
+            # Resolve LLM provider early -- needed for routing + env.
             # Use per-backend provider setting (defaults to "anthropic").
-            # An API key is REQUIRED for Anthropic provider — OAuth tokens from
+            # An API key is REQUIRED for Anthropic provider -- OAuth tokens from
             # Claude Free/Pro/Max plans are not permitted for third-party use.
             # See: https://code.claude.com/docs/en/legal-and-compliance
             from pocketpaw.llm.client import resolve_llm_client
@@ -874,8 +875,6 @@ class ClaudeSDKBackend:
                     options_kwargs["model"] = self.settings.claude_sdk_model
 
             # Capture stderr for better error diagnostics
-            _stderr_lines: list[str] = []
-
             def _on_stderr(line: str) -> None:
                 _stderr_lines.append(line)
                 logger.debug("Claude CLI stderr: %s", line)
