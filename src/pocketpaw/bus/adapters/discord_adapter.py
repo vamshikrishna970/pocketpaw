@@ -54,6 +54,7 @@ class DiscliAdapter(BaseChannelAdapter):
 
         self._proc: asyncio.subprocess.Process | None = None
         self._reader_task: asyncio.Task | None = None
+        self._stderr_task: asyncio.Task | None = None
         self._bot_id: str | None = None
         self._req_counter = 0
         self._pending_requests: dict[str, asyncio.Future] = {}
@@ -116,6 +117,7 @@ class DiscliAdapter(BaseChannelAdapter):
 
         self._start_time = time.time()
         self._reader_task = asyncio.create_task(self._read_stdout())
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
         self._eviction_task = asyncio.create_task(self._eviction_loop())
 
         # Wait for ready event
@@ -125,13 +127,34 @@ class DiscliAdapter(BaseChannelAdapter):
             await asyncio.sleep(1)
 
         if not self._bot_id:
+            # Clean up the spawned process before raising
+            await self._on_stop()
             raise RuntimeError("discli serve failed to connect — check token and intents")
 
         logger.info("Discli Adapter started (bot: %s)", self._bot_id)
 
+    async def _drain_stderr(self) -> None:
+        """Read and log stderr to prevent pipe buffer from blocking the process."""
+        if not self._proc or not self._proc.stderr:
+            return
+        try:
+            while True:
+                line = await self._proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode().strip()
+                if text:
+                    logger.debug("discli stderr: %s", text)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug("discli stderr reader error: %s", e)
+
     async def _on_stop(self) -> None:
         if self._eviction_task and not self._eviction_task.done():
             self._eviction_task.cancel()
+        if self._stderr_task and not self._stderr_task.done():
+            self._stderr_task.cancel()
         if self._reader_task and not self._reader_task.done():
             self._reader_task.cancel()
         if self._proc and self._proc.returncode is None:
