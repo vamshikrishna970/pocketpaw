@@ -127,7 +127,7 @@ class TestExtrasInstall:
             )
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
-        mock_install.assert_called_once_with("discord", "discord.ext.commands")
+        mock_install.assert_called_once_with("discord", "discli")
 
     def test_install_whatsapp_uses_personal_extra(self, test_client):
         """WhatsApp should use 'whatsapp-personal' as the extra name."""
