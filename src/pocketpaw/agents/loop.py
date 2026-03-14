@@ -429,6 +429,7 @@ class AgentLoop:
                     session_key=message.session_key,
                     file_context=file_context,
                     agents_md_dir=agents_md_dir,
+                    metadata=message.metadata,
                 ),
                 self.memory.get_compacted_history(
                     session_key,
