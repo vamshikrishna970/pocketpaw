@@ -747,6 +747,12 @@ async def websocket_handler(
                             "hasSarvamKey": bool(settings.sarvam_api_key),
                             "webHost": settings.web_host,
                             "webPort": settings.web_port,
+                            # Soul Protocol
+                            "soulEnabled": settings.soul_enabled,
+                            "soulName": settings.soul_name,
+                            "soulArchetype": settings.soul_archetype,
+                            "soulPersona": settings.soul_persona,
+                            "soulAutoSaveInterval": settings.soul_auto_save_interval,
                             "agentActive": agent_active,
                             "agentStatus": agent_status,
                         },
