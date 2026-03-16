@@ -593,6 +593,17 @@ class ClaudeSDKBackend:
             self._client_in_use = False
             logger.info("Persistent client disconnected")
 
+    async def _resilient_query(self, prompt: str, options):
+        """Wrap stateless _query with MessageParseError recovery."""
+        try:
+            async for event in self._query(prompt=prompt, options=options):
+                yield event
+        except Exception as exc:
+            if "MessageParseError" in type(exc).__name__:
+                logger.warning("Skipping unrecognised SDK event in stateless query: %s", exc)
+            else:
+                raise
+
     async def _resilient_receive(self, client):
         """Iterate over client messages, recovering from parse errors.
 
@@ -941,7 +952,7 @@ class ClaudeSDKBackend:
 
             if event_stream is None:
                 logger.info("Starting stateless query (fallback — _client_in_use was True)")
-                event_stream = self._query(prompt=message, options=options)
+                event_stream = self._resilient_query(prompt=message, options=options)
 
             # State tracking for StreamEvent deduplication
             _streamed_via_events = False

@@ -139,6 +139,36 @@ class DiscliAdapter(BaseChannelAdapter):
 
         logger.info("Discli Adapter started (bot: %s)", self._bot_id)
 
+        # Auto-register Discord MCP server so all backends can use it
+        self._register_discord_mcp()
+
+    @staticmethod
+    def _register_discord_mcp() -> None:
+        """Auto-register the Discord MCP server if not already configured."""
+        try:
+            from pocketpaw.mcp.config import MCPServerConfig, load_mcp_config, save_mcp_config
+
+            configs = load_mcp_config()
+            if any(c.name == "pocketpaw-discord" for c in configs):
+                logger.debug("Discord MCP server already registered")
+                return
+
+            import sys
+
+            python = sys.executable
+            configs.append(MCPServerConfig(
+                name="pocketpaw-discord",
+                transport="stdio",
+                command=python,
+                args=["-m", "pocketpaw.mcp.discord_server"],
+                env={},
+                enabled=True,
+            ))
+            save_mcp_config(configs)
+            logger.info("Auto-registered Discord MCP server")
+        except Exception as e:
+            logger.warning("Failed to register Discord MCP server: %s", e)
+
     async def _write_slash_config(self) -> str | None:
         """Write slash command definitions to a temp file."""
         import tempfile
@@ -472,14 +502,17 @@ class DiscliAdapter(BaseChannelAdapter):
             )
             return
 
-        # Handle /converse locally — admin only
+        # Handle /converse locally — requires admin or manage_guild
         if command == "converse":
             is_admin = data.get("is_admin", False)
-            if not is_admin:
+            member_perms = data.get("member_permissions", 0)
+            # Discord permission bit 0x20 = manage_guild
+            has_manage_guild = bool(member_perms & 0x20)
+            if not is_admin and not has_manage_guild:
                 await self._send_command(
                     "interaction_followup",
                     interaction_token=interaction_token,
-                    content="Only server administrators can toggle conversation mode.",
+                    content="You need **Administrator** or **Manage Server** permission.",
                 )
                 return
             ch_id = int(channel_id)
@@ -615,6 +648,11 @@ class DiscliAdapter(BaseChannelAdapter):
     async def _handle_stream_chunk(self, message: OutboundMessage) -> None:
         chat_id = message.chat_id
         content = message.content
+
+        # Suppress [NO_RESPONSE] even in streaming mode
+        if self._is_no_response(content):
+            await self._send_command("typing_stop", channel_id=chat_id)
+            return
 
         if chat_id not in self._active_streams:
             # Start a new stream

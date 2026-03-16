@@ -677,15 +677,15 @@ wheels = [
 
 [[package]]
 name = "discord-cli-agent"
-version = "0.6.0"
+version = "0.6.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
     { name = "discord-py" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/91/12/7d733cd379c7272bbdf447b3bb1b2873bc62234e2878c6dcf6a7d6081124/discord_cli_agent-0.6.0.tar.gz", hash = "sha256:701931032ad7ecdda9152cde2ca8a2a950a0c09a5ff854e5633e2936188921e3", size = 34034, upload-time = "2026-03-14T15:53:54.495Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/84/5a/3da941ae2151485f9578a68eb53875e85962e1ebb7a96992487fc0f68013/discord_cli_agent-0.6.4.tar.gz", hash = "sha256:05d452bda26b01acde26ba6dfcef34e1a7e03ed1f343a9cff981e18f5f710c75", size = 34201, upload-time = "2026-03-16T10:15:13.145Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a7/df/4a9ddb61afe4b39c0f1c69b959817ce13c09f093762fbcee8602c1dc946b/discord_cli_agent-0.6.0-py3-none-any.whl", hash = "sha256:c1f5c24f1b7be767e024296a052ae33cba6f8bef007e09a7a2ac675270df57ef", size = 36474, upload-time = "2026-03-14T15:53:53.168Z" },
+    { url = "https://files.pythonhosted.org/packages/49/b6/a6339cd0be37fff1d4514e95020e26e585e82db39092dafefb9691afe77a/discord_cli_agent-0.6.4-py3-none-any.whl", hash = "sha256:d429dbfe87d069382b6b44b0c012218777b73a5c1df899308fe87dcf32281a09", size = 36624, upload-time = "2026-03-16T10:15:11.691Z" },
 ]
 
 [[package]]
@@ -3388,7 +3388,7 @@ provides-extras = ["dashboard", "telegram", "browser", "desktop", "openai-agents
 dev = [
     { name = "botbuilder-core", specifier = ">=4.16.0" },
     { name = "botbuilder-integration-aiohttp", specifier = ">=4.16.0" },
-    { name = "discord-cli-agent", specifier = ">=0.6.0" },
+    { name = "discord-cli-agent", specifier = ">=0.6.4" },
     { name = "elevenlabs", specifier = ">=1.0.0" },
     { name = "github-copilot-sdk", specifier = ">=0.1.0" },
     { name = "google-adk", specifier = ">=1.0.0" },
