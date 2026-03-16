@@ -199,51 +199,48 @@ TOOLS = [
     },
 ]
 
+
 # Map tool names to discli command builders
 def _build_command(tool_name: str, args: dict) -> str:
     """Convert an MCP tool call into a discli command string."""
     match tool_name:
         case "discord_send_message":
-            return f'message send {args["channel"]} {shlex.quote(args["text"])}'
+            return f"message send {args['channel']} {shlex.quote(args['text'])}"
         case "discord_dm":
-            return f'dm send {args["user_id"]} {shlex.quote(args["text"])}'
+            return f"dm send {args['user_id']} {shlex.quote(args['text'])}"
         case "discord_create_thread":
             return (
-                f'thread create {args["channel"]} {args["message_id"]} '
-                f'{shlex.quote(args["title"])}'
+                f"thread create {args['channel']} {args['message_id']} {shlex.quote(args['title'])}"
             )
         case "discord_send_thread":
-            return f'thread send {args["thread_id"]} {shlex.quote(args["text"])}'
+            return f"thread send {args['thread_id']} {shlex.quote(args['text'])}"
         case "discord_create_poll":
             opts = " ".join(shlex.quote(o) for o in args["options"])
-            cmd = f'poll create {args["channel"]} {shlex.quote(args["question"])} {opts}'
+            cmd = f"poll create {args['channel']} {shlex.quote(args['question'])} {opts}"
             if args.get("multiple"):
                 cmd += " --multiple"
             return cmd
         case "discord_add_reaction":
-            return f'reaction add {args["channel"]} {args["message_id"]} {args["emoji"]}'
+            return f"reaction add {args['channel']} {args['message_id']} {args['emoji']}"
         case "discord_list_messages":
             limit = args.get("limit", 20)
-            return f'message list {args["channel"]} --limit {limit}'
+            return f"message list {args['channel']} --limit {limit}"
         case "discord_search_messages":
             limit = args.get("limit", 50)
-            return f'message search {args["channel"]} {shlex.quote(args["query"])} --limit {limit}'
+            return f"message search {args['channel']} {shlex.quote(args['query'])} --limit {limit}"
         case "discord_list_channels":
-            return f'channel list --server {shlex.quote(args["server"])}'
+            return f"channel list --server {shlex.quote(args['server'])}"
         case "discord_member_info":
-            return f'member info {shlex.quote(args["server"])} {args["username"]}'
+            return f"member info {shlex.quote(args['server'])} {args['username']}"
         case "discord_list_members":
             limit = args.get("limit", 50)
-            return f'member list {shlex.quote(args["server"])} --limit {limit}'
+            return f"member list {shlex.quote(args['server'])} --limit {limit}"
         case "discord_role_list":
-            return f'role list {shlex.quote(args["server"])}'
+            return f"role list {shlex.quote(args['server'])}"
         case "discord_role_assign":
-            return (
-                f'role assign {shlex.quote(args["server"])} '
-                f'{args["username"]} {args["role"]}'
-            )
+            return f"role assign {shlex.quote(args['server'])} {args['username']} {args['role']}"
         case "discord_server_info":
-            return f'server info {shlex.quote(args["server"])}'
+            return f"server info {shlex.quote(args['server'])}"
         case _:
             raise ValueError(f"Unknown tool: {tool_name}")
 
@@ -257,7 +254,9 @@ async def _run_discli(command: str) -> str:
     try:
         cmd_args = shlex.split(command)
         proc = await asyncio.create_subprocess_exec(
-            discli, "--json", *cmd_args,
+            discli,
+            "--json",
+            *cmd_args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

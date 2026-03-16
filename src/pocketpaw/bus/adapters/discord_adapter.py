@@ -156,14 +156,16 @@ class DiscliAdapter(BaseChannelAdapter):
             import sys
 
             python = sys.executable
-            configs.append(MCPServerConfig(
-                name="pocketpaw-discord",
-                transport="stdio",
-                command=python,
-                args=["-m", "pocketpaw.mcp.discord_server"],
-                env={},
-                enabled=True,
-            ))
+            configs.append(
+                MCPServerConfig(
+                    name="pocketpaw-discord",
+                    transport="stdio",
+                    command=python,
+                    args=["-m", "pocketpaw.mcp.discord_server"],
+                    env={},
+                    enabled=True,
+                )
+            )
             save_mcp_config(configs)
             logger.info("Auto-registered Discord MCP server")
         except Exception as e:
