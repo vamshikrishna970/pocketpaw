@@ -6,7 +6,7 @@ provider for each backend (e.g. OpenRouter, LiteLLM, Ollama).
 
 from __future__ import annotations
 
-from pocketpaw.health.checks.api_keys import _NON_ANTHROPIC_PROVIDERS, _NON_OPENAI_PROVIDERS
+from pocketpaw.health.checks.constants import NON_ANTHROPIC_PROVIDERS, NON_OPENAI_PROVIDERS
 from pocketpaw.health.checks.result import HealthCheckResult
 
 _OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
@@ -21,7 +21,7 @@ async def check_llm_reachable() -> HealthCheckResult:
 
     if backend == "claude_agent_sdk":
         provider = getattr(settings, "claude_sdk_provider", None) or "anthropic"
-        if provider in _NON_ANTHROPIC_PROVIDERS:
+        if provider in NON_ANTHROPIC_PROVIDERS:
             return await _check_alt_provider_reachable(settings, provider)
         return await _check_anthropic_reachable(settings)
 
@@ -33,7 +33,7 @@ async def check_llm_reachable() -> HealthCheckResult:
 
     elif backend == "openai_agents":
         provider = getattr(settings, "openai_agents_provider", None) or "openai"
-        if provider in _NON_OPENAI_PROVIDERS:
+        if provider in NON_OPENAI_PROVIDERS:
             return await _check_alt_provider_reachable(settings, provider)
         return await _check_openai_reachable(settings)
 

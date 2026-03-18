@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 
+from pocketpaw.health.checks.constants import NON_ANTHROPIC_PROVIDERS, NON_OPENAI_PROVIDERS
 from pocketpaw.health.checks.result import HealthCheckResult
 
 
@@ -59,15 +60,12 @@ def check_api_key_primary() -> HealthCheckResult:
 
 # -- Per-backend helpers ------------------------------------------------------
 
-_NON_ANTHROPIC_PROVIDERS = ("ollama", "openai_compatible", "gemini", "litellm", "openrouter")
-_NON_OPENAI_PROVIDERS = ("ollama", "openai_compatible", "litellm", "openrouter")
-
 
 def _check_claude_sdk_key(settings) -> HealthCheckResult:
     import os
 
     sdk_provider = getattr(settings, "claude_sdk_provider", None) or "anthropic"
-    if sdk_provider in _NON_ANTHROPIC_PROVIDERS:
+    if sdk_provider in NON_ANTHROPIC_PROVIDERS:
         return HealthCheckResult(
             check_id="api_key_primary",
             name="Primary API Key",
@@ -147,7 +145,7 @@ def _check_openai_agents_key(settings) -> HealthCheckResult:
     import os
 
     agents_provider = getattr(settings, "openai_agents_provider", None) or "openai"
-    if agents_provider in _NON_OPENAI_PROVIDERS:
+    if agents_provider in NON_OPENAI_PROVIDERS:
         return HealthCheckResult(
             check_id="api_key_primary",
             name="Primary API Key",
