@@ -1732,7 +1732,7 @@ async def svelte_catch_all(request: Request, full_path: str):
     """Serve SvelteKit static files or fall back to index.html for SPA routing."""
     from starlette.responses import FileResponse
 
-    if get_settings().frontend != "svelte" or not WEBAPP_DIR.exists():
+    if Settings.load().frontend != "svelte" or not WEBAPP_DIR.exists():
         raise HTTPException(status_code=404, detail="Not found")
 
     # Try to serve an exact file match (favicon.png, robots.txt, etc.)

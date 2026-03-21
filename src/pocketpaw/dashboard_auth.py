@@ -154,6 +154,7 @@ async def _auth_dispatch(request: Request) -> Response | None:
     # Exempt routes — return None to let the request through
     exempt_paths = [
         "/static",
+        "/_app",  # SvelteKit hashed assets — no auth or rate limiting
         "/favicon.ico",
         "/ws",  # WebSocket handles its own auth in dashboard_ws.py
         "/v1/ws",  # v1 WebSocket (short path) — same handler, same auth
