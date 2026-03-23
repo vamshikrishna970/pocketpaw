@@ -35,7 +35,7 @@
     style.id = "glass-opacity-style";
     if (enabled) {
       document.body.classList.remove("glass-off");
-      style.textContent = `.liquid-glass { background-color: color-mix(in srgb, var(--c-glass) ${opacity}%, transparent) !important; backdrop-filter: blur(8px) saturate(var(--saturation)) url(#switcher) !important; }`;
+      style.textContent = `.liquid-glass { background-color: color-mix(in srgb, #262621 ${opacity}%, transparent) !important; backdrop-filter: blur(8px) saturate(var(--saturation)) url(#switcher) !important; }`;
     } else {
       document.body.classList.add("glass-off");
       style.textContent = `.glass-off .liquid-glass { background-color: #262621 !important; backdrop-filter: none !important; border-color: rgba(255,255,255,0.10) !important; }`;
@@ -135,7 +135,7 @@
       <input
         type="range"
         min="10"
-        max="80"
+        max="95"
         step="1"
         value={glassOpacity}
         oninput={handleGlassChange}
@@ -146,7 +146,7 @@
         <button disabled={!glassEnabled} class={glassOpacity <= 20 ? "preset-btn preset-active" : "preset-btn"} onclick={() => setGlassPreset(15)}>Clear</button>
         <button disabled={!glassEnabled} class={glassOpacity > 20 && glassOpacity <= 45 ? "preset-btn preset-active" : "preset-btn"} onclick={() => setGlassPreset(38)}>Default</button>
         <button disabled={!glassEnabled} class={glassOpacity > 45 && glassOpacity <= 65 ? "preset-btn preset-active" : "preset-btn"} onclick={() => setGlassPreset(55)}>Dark</button>
-        <button disabled={!glassEnabled} class={glassOpacity > 65 ? "preset-btn preset-active" : "preset-btn"} onclick={() => setGlassPreset(75)}>Opaque</button>
+        <button disabled={!glassEnabled} class={glassOpacity > 65 ? "preset-btn preset-active" : "preset-btn"} onclick={() => setGlassPreset(90)}>Opaque</button>
       </div>
     </div>
   </div>

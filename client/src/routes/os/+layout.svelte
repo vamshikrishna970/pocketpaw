@@ -43,7 +43,7 @@
     glassStyle.id = "glass-opacity-style";
     if (glassOn) {
       document.body.classList.remove("glass-off");
-      glassStyle.textContent = `.liquid-glass { background-color: color-mix(in srgb, var(--c-glass) ${savedGlass}%, transparent) !important; backdrop-filter: blur(8px) saturate(var(--saturation)) url(#switcher) !important; }`;
+      glassStyle.textContent = `.liquid-glass { background-color: color-mix(in srgb, #262621 ${savedGlass}%, transparent) !important; backdrop-filter: blur(8px) saturate(var(--saturation)) url(#switcher) !important; }`;
     } else {
       document.body.classList.add("glass-off");
       glassStyle.textContent = `.glass-off .liquid-glass { background-color: #262621 !important; backdrop-filter: none !important; border-color: rgba(255,255,255,0.10) !important; }`;
