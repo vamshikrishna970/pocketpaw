@@ -1115,7 +1115,7 @@ class ClaudeSDKBackend:
                                     )
                                 else:
                                     continue
-                                if result_text and "<!-- media:" in result_text:
+                                if result_text:
                                     yield AgentEvent(
                                         type="tool_result",
                                         content=result_text,

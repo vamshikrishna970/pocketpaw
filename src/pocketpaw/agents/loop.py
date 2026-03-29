@@ -14,6 +14,7 @@ Updated: feat/pocketpaw-cognitive-engine
 """
 
 import asyncio
+import json
 import logging
 import re
 import time
@@ -57,6 +58,76 @@ _GENERATED_PATH_RE = re.compile(
 def _extract_media_paths(text: str) -> list[str]:
     """Extract media file paths from <!-- media:/path --> tags in text."""
     return _MEDIA_TAG_RE.findall(text)
+
+
+def _extract_pocket_json(content: str) -> dict | None:
+    """Extract a ``{"pocket_event": ...}`` JSON object from tool output.
+
+    The tool returns ``{json}\\n\\nhuman message``, but the ``\\n\\n``
+    separator may be lost when the SDK joins TextBlocks with spaces.
+    Use brace-matching to find the outermost JSON object reliably.
+    """
+    start = content.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(content)):
+        ch = content[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(content[start : i + 1])
+                except (json.JSONDecodeError, ValueError):
+                    return None
+    return None
+
+
+async def _publish_pocket_event(
+    bus: "MessageBus", content: str, session_key: str
+) -> None:
+    """Detect pocket event JSON in tool output and publish a dedicated SystemEvent.
+
+    Pocket tools return output as: ``{json}\\n\\nhuman message``.
+    The JSON block has a ``pocket_event`` key (``"created"`` or ``"mutation"``).
+    """
+    # Fast path: skip content that can't contain a pocket event.
+    if '"pocket_event"' not in content:
+        return
+    data = _extract_pocket_json(content)
+    if not data or "pocket_event" not in data:
+        return
+
+    evt_type = data["pocket_event"]
+    if evt_type == "created":
+        await bus.publish_system(
+            SystemEvent(
+                event_type="pocket_created",
+                data={"spec": data.get("spec", {}), "session_key": session_key},
+            )
+        )
+    elif evt_type == "mutation":
+        await bus.publish_system(
+            SystemEvent(
+                event_type="pocket_mutation",
+                data={"mutation": data.get("mutation", {}), "session_key": session_key},
+            )
+        )
 
 
 def _extract_generated_paths(text: str) -> list[str]:
@@ -689,6 +760,9 @@ class AgentLoop:
                                 },
                             )
                         )
+                        # Detect pocket events in tool output and publish
+                        # dedicated SystemEvents for the SSE handler.
+                        await _publish_pocket_event(self.bus, econtent, session_key)
                         media_paths.extend(_extract_media_paths(econtent))
 
                     elif etype == "error":

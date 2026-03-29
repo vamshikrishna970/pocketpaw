@@ -30,21 +30,22 @@ def remove_tool():
 
 
 def _extract_spec(result: str) -> dict:
-    """Extract the JSON spec from the marker-wrapped tool result."""
-    import re
+    """Extract the JSON spec from the tool result.
 
-    m = re.search(r"<!-- pocket-spec:(.*?):pocket-spec -->", result, re.DOTALL)
-    assert m, f"No pocket-spec marker found in: {result[:200]}"
-    return json.loads(m.group(1))
+    Tools return: ``{json_with_pocket_event}\\n\\nhuman message``.
+    """
+    json_part = result.split("\n\n", 1)[0]
+    data = json.loads(json_part)
+    assert data.get("pocket_event") == "created", f"Expected pocket_event=created, got: {data}"
+    return data["spec"]
 
 
 def _extract_mutation(result: str) -> dict:
-    """Extract the JSON mutation from the marker-wrapped tool result."""
-    import re
-
-    m = re.search(r"<!-- pocket-mutation:(.*?):pocket-mutation -->", result, re.DOTALL)
-    assert m, f"No pocket-mutation marker found in: {result[:200]}"
-    return json.loads(m.group(1))
+    """Extract the JSON mutation from the tool result."""
+    json_part = result.split("\n\n", 1)[0]
+    data = json.loads(json_part)
+    assert data.get("pocket_event") == "mutation", f"Expected pocket_event=mutation, got: {data}"
+    return data["mutation"]
 
 
 # ---------------------------------------------------------------------------

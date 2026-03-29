@@ -1,8 +1,8 @@
 # Pocket chat router — dedicated endpoint for pocket creation.
 # Updated: system prompt now teaches Ripple UniversalSpec v2.0 format
-# with intent='dashboard'. SSE parser updated to detect both legacy
-# and new pocket-spec markers. Also detects pocket-mutation markers
-# for AddWidgetTool / RemoveWidgetTool.
+# with intent='dashboard'. Pocket tools publish dedicated SystemEvents
+# (pocket_created / pocket_mutation) via the AgentLoop, so the SSE
+# handler simply forwards them — no regex/marker extraction needed.
 
 from __future__ import annotations
 
@@ -27,12 +27,8 @@ router = APIRouter(
 
 _WS_PREFIX = "websocket_"
 
-# Match the JSON arg passed to create_pocket in a Bash command
+# Match the JSON arg passed to create_pocket in a Bash command (legacy fallback)
 _CREATE_POCKET_RE = re.compile(r"create_pocket\s+'(.*?)'", re.DOTALL)
-# Match pocket-spec markers in tool results (UniversalSpec or legacy)
-_POCKET_SPEC_RE = re.compile(r"<!-- pocket-spec:(.*?):pocket-spec -->", re.DOTALL)
-# Match pocket-mutation markers from AddWidgetTool / RemoveWidgetTool
-_POCKET_MUTATION_RE = re.compile(r"<!-- pocket-mutation:(.*?):pocket-mutation -->", re.DOTALL)
 
 _POCKET_SYSTEM_CONTEXT = """\
 <pocket-creation-context>
@@ -361,7 +357,31 @@ async def pocket_chat_stream(body: ChatRequest):
                 etype = event["event"]
                 edata = event["data"]
 
-                # Check tool_start for create_pocket Bash commands
+                # Pocket events arrive as dedicated event types from the
+                # AgentLoop (no regex/marker extraction needed).
+                if etype == "pocket_created" and not pocket_emitted:
+                    spec = edata.get("spec", {})
+                    spec = _prepare_pocket_spec(spec)
+                    if spec:
+                        pocket_emitted = True
+                        logger.info(
+                            "Pocket created: %s (%d widgets)",
+                            spec.get("title", spec.get("name", "?")),
+                            len(spec.get("widgets", [])),
+                        )
+                        yield (f"event: pocket_created\ndata: {json.dumps(spec)}\n\n")
+                    continue
+
+                if etype == "pocket_mutation":
+                    mutation = edata.get("mutation", {})
+                    if mutation:
+                        yield (
+                            f"event: pocket_mutation\n"
+                            f"data: {json.dumps(mutation)}\n\n"
+                        )
+                    continue
+
+                # Legacy fallback: extract pocket spec from Bash tool_start
                 if etype == "tool_start" and not pocket_emitted:
                     cmd = ""
                     inp = edata.get("input", {})
@@ -381,36 +401,6 @@ async def pocket_chat_stream(body: ChatRequest):
                                 len(spec.get("widgets", [])),
                             )
                             yield (f"event: pocket_created\ndata: {json.dumps(spec)}\n\n")
-
-                # Check tool_result for pocket-spec markers (UniversalSpec)
-                if etype == "tool_result" and not pocket_emitted:
-                    result = edata.get("result", "")
-                    if isinstance(result, str):
-                        m = _POCKET_SPEC_RE.search(result)
-                        if m:
-                            try:
-                                spec = json.loads(m.group(1))
-                                spec = _prepare_pocket_spec(spec)
-                                if spec:
-                                    pocket_emitted = True
-                                    yield (f"event: pocket_created\ndata: {json.dumps(spec)}\n\n")
-                            except json.JSONDecodeError:
-                                pass
-
-                # Check tool_result for pocket-mutation markers (add/remove widget)
-                if etype == "tool_result":
-                    result = edata.get("result", "")
-                    if isinstance(result, str):
-                        m = _POCKET_MUTATION_RE.search(result)
-                        if m:
-                            try:
-                                mutation = json.loads(m.group(1))
-                                yield (
-                                    f"event: pocket_mutation\n"
-                                    f"data: {json.dumps(mutation)}\n\n"
-                                )
-                            except json.JSONDecodeError:
-                                pass
 
                 # Forward original event
                 yield (f"event: {etype}\ndata: {json.dumps(edata)}\n\n")

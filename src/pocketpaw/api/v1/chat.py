@@ -142,6 +142,17 @@ class _APISessionBridge:
                         },
                     }
                 )
+            elif evt.event_type == "pocket_created":
+                await self.queue.put(
+                    {"event": "pocket_created", "data": {"spec": data.get("spec", {})}}
+                )
+            elif evt.event_type == "pocket_mutation":
+                await self.queue.put(
+                    {
+                        "event": "pocket_mutation",
+                        "data": {"mutation": data.get("mutation", {})},
+                    }
+                )
             elif evt.event_type == "error":
                 await self.queue.put(
                     {"event": "error", "data": {"detail": data.get("message", "")}}

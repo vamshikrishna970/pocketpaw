@@ -321,12 +321,12 @@ class CreatePocketTool(BaseTool):
             },
         }
 
-        result_json = json.dumps(spec, indent=2)
-
-        # Use a marker so the frontend can detect this is a pocket spec
-        marker = f"<!-- pocket-spec:{result_json}:pocket-spec -->"
+        # Return structured JSON (first block) + human message (second block).
+        # The AgentLoop detects the pocket_event key and publishes a dedicated
+        # SystemEvent so the SSE handler receives it without regex/markers.
+        event_payload = json.dumps({"pocket_event": "created", "spec": spec})
         msg = f"Created pocket **{pocket_title}** with {len(built_widgets)} widgets."
-        return f"{marker}\n\n{msg}"
+        return f"{event_payload}\n\n{msg}"
 
 
 class AddWidgetTool(BaseTool):
@@ -408,10 +408,9 @@ class AddWidgetTool(BaseTool):
         if position is not None:
             mutation["position"] = position
 
-        result_json = json.dumps(mutation, indent=2)
-        marker = f"<!-- pocket-mutation:{result_json}:pocket-mutation -->"
+        event_payload = json.dumps({"pocket_event": "mutation", "mutation": mutation})
         msg = f"Added widget **{built_widget['title']}** to pocket `{pocket_id}`."
-        return f"{marker}\n\n{msg}"
+        return f"{event_payload}\n\n{msg}"
 
 
 class RemoveWidgetTool(BaseTool):
@@ -462,7 +461,6 @@ class RemoveWidgetTool(BaseTool):
             "widget_id": widget_id,
         }
 
-        result_json = json.dumps(mutation, indent=2)
-        marker = f"<!-- pocket-mutation:{result_json}:pocket-mutation -->"
+        event_payload = json.dumps({"pocket_event": "mutation", "mutation": mutation})
         msg = f"Removed widget `{widget_id}` from pocket `{pocket_id}`."
-        return f"{marker}\n\n{msg}"
+        return f"{event_payload}\n\n{msg}"
