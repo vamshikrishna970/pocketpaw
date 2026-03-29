@@ -963,12 +963,25 @@ class AgentLoop:
                 # Not yet initialized, just discard the reference
                 self._soul_manager = None
 
+    def _build_cognitive_engine(self) -> Any:
+        """Build a CognitiveEngine for soul, backed by the active agent backend."""
+        try:
+            from pocketpaw.soul.cognitive import PocketPawCognitiveEngine
+            return PocketPawCognitiveEngine(
+                backend_provider=lambda: (
+                    self._get_router()._backend if self._router is not None else None
+                )
+            )
+        except ImportError:
+            return None
+
     async def _initialize_soul_runtime(self) -> None:
         """Initialize soul when enabled at runtime."""
         if self._soul_manager is None:
             return
         try:
-            await self._soul_manager.initialize()
+            engine = self._build_cognitive_engine()
+            await self._soul_manager.initialize(engine=engine)
             if self._soul_manager.bootstrap_provider:
                 self.context_builder.bootstrap = self._soul_manager.bootstrap_provider
             self._soul_manager.start_auto_save()
