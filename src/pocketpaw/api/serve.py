@@ -10,8 +10,20 @@ the dashboard mode.
 """
 
 import logging
+from contextlib import asynccontextmanager
+
+from pocketpaw.dashboard_lifecycle import shutdown_event, startup_event
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def api_lifespan(app):
+    await startup_event()
+    try:
+        yield
+    finally:
+        await shutdown_event()
 
 
 def create_api_app():
@@ -29,6 +41,7 @@ def create_api_app():
         docs_url="/api/v1/docs",
         redoc_url="/api/v1/redoc",
         openapi_url="/api/v1/openapi.json",
+        lifespan=api_lifespan,
     )
 
     # --- Middleware (order matters: last added = outermost = runs first) --
@@ -113,19 +126,6 @@ def create_api_app():
     ):
         """WebSocket v1 short path — for clients using /v1/ws."""
         await _handle_ws(websocket, token, resume_session)
-
-    # --- Lifecycle events -----------------------------------------------
-    @app.on_event("startup")
-    async def startup():
-        from pocketpaw.dashboard_lifecycle import startup_event
-
-        await startup_event()
-
-    @app.on_event("shutdown")
-    async def shutdown():
-        from pocketpaw.dashboard_lifecycle import shutdown_event
-
-        await shutdown_event()
 
     return app
 
